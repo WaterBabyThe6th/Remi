@@ -14,7 +14,7 @@ import urllib.request
 
 # 与 ppe-qa-session.sh 保持一致：只对 PPE slot 生效。这里再校验一次，避免有人
 # 绕过 shell 直接调这个脚本去别的 Origin 签 token。
-PPE_HOSTS = ("10.37.117.209", "n37-117-209.byted.org")
+PPE_HOSTS = ("10.37.201.64", "n37-201-064.byted.org")
 PPE_PORTS = tuple(str(p) for p in range(32101, 32107))
 
 EXPIRES_IN_DAYS = 1

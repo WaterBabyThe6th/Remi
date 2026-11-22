@@ -99,7 +99,7 @@ describe("Zadig PPE deployment", () => {
     expect(versions).toContain('K3S_CLUSTER_CIDR="172.28.0.0/16"');
     expect(versions).toContain('K3S_SERVICE_CIDR="172.29.0.0/16"');
     expect(versions).toContain('ZADIG_NODE_PORT="32080"');
-    expect(versions).toContain('ZADIG_PUBLIC_HOST="n37-117-209.byted.org"');
+    expect(versions).toContain('ZADIG_PUBLIC_HOST="n37-201-064.byted.org"');
     expect(versions).toContain('ZADIG_PUBLIC_PORT="410"');
     expect(versions).toContain('PPE_REGISTRY_NODE_PORT="32050"');
     expect(installer).toContain("--disable traefik --disable servicelb");
@@ -361,7 +361,7 @@ describe("Zadig PPE deployment", () => {
     expect(desktopWrapper).toContain("refusing to inject a token into a non-PPE origin");
     expect(desktopWrapper).toContain("refusing to inject a Multiremi PAT into an untrusted origin");
     expect(desktopWrapper).toMatch(
-      /ppe_authenticate_browser[\s\S]*?\^\(http:\/\/\(10\\\.37\\\.117\\\.209\|n37-117-209\\\.byted\\\.org\):3210\[1-6\]\)/u,
+      /ppe_authenticate_browser[\s\S]*?\^\(http:\/\/\(10\\\.37\\\.201\\\.64\|n37-201-064\\\.byted\\\.org\):3210\[1-6\]\)/u,
     );
   });
 

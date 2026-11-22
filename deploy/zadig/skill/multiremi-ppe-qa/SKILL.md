@@ -69,8 +69,8 @@ Multiremi 的自动回写。
    即使构建失败，`provisioning` 结果也包含可用于释放环境的租约信息。不得猜测 slot。
 4. 等待工作流结束。失败时读取 Zadig 工作流与 Pod 日志，修复后重试，不得转向生产环境验证。
 5. `platform-daemon` 还需验证测试 Runtime 在线、任务可分派、最小任务可结束且日志可回传。
-6. 只访问 `PPE_RESULT.url`。合法地址为 `http://10.37.117.209:32101` 至 `:32106`
-   或同端口的 `n37-117-209.byted.org`。PPE 不启用飞书 SSO，也不得读取或传入生产
+6. 只访问 `PPE_RESULT.url`。合法地址为 `http://10.37.201.64:32101` 至 `:32106`
+   或同端口的 `n37-201-064.byted.org`。PPE 不启用飞书 SSO，也不得读取或传入生产
    Web Token；但**服务端无认证不等于浏览器可以免登录**——前端是 token 模式，
    `localStorage` 没有 `multimira_token` 就会直接跳 `/login`（MUL-334）。页面验收
    前先用该 PPE 自己签发的短期本地 PAT 引导登录态，再用 `$multiremi-web-qa` 在 212

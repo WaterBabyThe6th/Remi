@@ -37,17 +37,17 @@ describe("ppe-qa-session.sh", () => {
   test("refuses every origin that is not an isolated PPE slot", () => {
     const rejected = [
       // 生产：无端口，永远不能走这条路径
-      "http://n37-117-209.byted.org",
-      "http://n37-117-209.byted.org/agents",
+      "http://n37-201-064.byted.org",
+      "http://n37-201-064.byted.org/agents",
       // 端口在 PPE 区间外
-      "http://10.37.117.209:32107",
-      "http://10.37.117.209:3000",
+      "http://10.37.201.64:32107",
+      "http://10.37.201.64:3000",
       // 协议不符
-      "https://10.37.117.209:32101",
+      "https://10.37.201.64:32101",
       // 主机名不在白名单
       "http://evil.example.com:32101",
       // 端口看着像但拼在主机名里
-      "http://10.37.117.209.evil.com:32101",
+      "http://10.37.201.64.evil.com:32101",
     ];
     for (const url of rejected) {
       const result = runSession(["login", "MUL-334", url], {
@@ -70,7 +70,7 @@ describe("ppe-qa-session.sh", () => {
   });
 
   test("rejects an unusable issue key", () => {
-    const result = runSession(["login", "../../etc", "http://10.37.117.209:32101"], {
+    const result = runSession(["login", "../../etc", "http://10.37.201.64:32101"], {
       MULTIREMI_PPE_QA_STATE_DIR: stateDir(),
     });
     expect(result.code).toBe(2);
@@ -79,8 +79,8 @@ describe("ppe-qa-session.sh", () => {
 
   test("refuses to start a second session on top of a live one", () => {
     const dir = stateDir();
-    writeFileSync(join(dir, "MUL-334.state"), "http://10.37.117.209:32101\ntok_existing\n");
-    const result = runSession(["login", "MUL-334", "http://10.37.117.209:32101"], {
+    writeFileSync(join(dir, "MUL-334.state"), "http://10.37.201.64:32101\ntok_existing\n");
+    const result = runSession(["login", "MUL-334", "http://10.37.201.64:32101"], {
       MULTIREMI_PPE_QA_STATE_DIR: dir,
     });
     expect(result.code).toBe(2);
@@ -92,9 +92,9 @@ describe("ppe-qa-session.sh", () => {
     const dir = stateDir();
     expect(runSession(["status", "MUL-334"], { MULTIREMI_PPE_QA_STATE_DIR: dir }).stdout)
       .toContain("no active PPE QA session");
-    writeFileSync(join(dir, "MUL-334.state"), "http://10.37.117.209:32101\ntok_abc\n");
+    writeFileSync(join(dir, "MUL-334.state"), "http://10.37.201.64:32101\ntok_abc\n");
     const active = runSession(["status", "MUL-334"], { MULTIREMI_PPE_QA_STATE_DIR: dir });
-    expect(active.stdout).toContain("origin=http://10.37.117.209:32101");
+    expect(active.stdout).toContain("origin=http://10.37.201.64:32101");
     expect(active.stdout).toContain("token_id=tok_abc");
     rmSync(dir, { recursive: true, force: true });
   });
@@ -107,7 +107,7 @@ describe("ppe-qa-session.sh", () => {
     // 指向一个不会应答的地址，让 DELETE 必然失败。本地是立刻拒绝，CI 的出口网络
     // 会一路挂到 curl 超时，所以这里显式把超时压到 1 秒，别让默认的 15 秒把用例
     // 拖过 bun 的超时（这正是本用例在 CI 上挂过的原因）。
-    writeFileSync(state, "http://10.37.117.209:32106\ntok_unreachable\n");
+    writeFileSync(state, "http://10.37.201.64:32106\ntok_unreachable\n");
     const result = runSession(["logout", "MUL-334"], {
       MULTIREMI_PPE_QA_STATE_DIR: dir,
       MULTIREMI_PPE_QA_HTTP_TIMEOUT: "1",
@@ -141,10 +141,10 @@ describe("ppe-qa-mint.py", () => {
   test("enforces the PPE allowlist even when called directly", () => {
     const dir = stateDir();
     for (const origin of [
-      "http://n37-117-209.byted.org",
+      "http://n37-201-064.byted.org",
       "http://127.0.0.1:32101",
-      "https://10.37.117.209:32101",
-      "http://10.37.117.209:32100",
+      "https://10.37.201.64:32101",
+      "http://10.37.201.64:32100",
     ]) {
       const result = runMint({
         MULTIREMI_PPE_QA_ORIGIN: origin,
