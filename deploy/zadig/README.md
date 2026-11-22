@@ -11,7 +11,7 @@ production platform.
   ranges do not overlap the production Docker networks.
 - Traefik and ServiceLB are disabled. Zadig keeps NodePort `32080` as its
   internal edge. Host Nginx exposes the stable public URL
-  `http://n37-117-209.byted.org:410`; `/ci` redirects to that URL.
+  `http://n37-201-064.byted.org:410`; `/ci` redirects to that URL.
 - Six pre-created namespaces (`multiremi-ppe-1` through
   `multiremi-ppe-6`) are the complete PPE capacity pool. Workflows atomically
   assign an empty slot to an `ISSUE_KEY`; agents never choose slots manually.
@@ -92,7 +92,7 @@ images, because the server rejects daemons below `DAEMON_MIN_CLI_VERSION`.
 After changing `ppe/workflow.sh`, rerun `configure-ppe.sh` as root on 209 so Zadig
 loads the updated workflow definition. The workflow emits a structured
 `PPE_RESULT` containing its slot, lease ID, URL, state, and expiry. Browser URLs
-are `http://10.37.117.209:32101` through `:32106`; PPE intentionally has no
+are `http://10.37.201.64:32101` through `:32106`; PPE intentionally has no
 Feishu SSO, needs no custom Header, and must never receive a production Web token.
 
 The all-role API uses `Recreate` so the old single hub owner exits before its

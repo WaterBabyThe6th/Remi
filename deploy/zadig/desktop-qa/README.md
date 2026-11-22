@@ -26,7 +26,7 @@ ssh <212> 'cp -a /usr/local/bin/multiremi-qa-browser /usr/local/bin/multiremi-qa
 | --- | --- |
 | `prepare` / `run` | Aiden 等必须走人工 SSO 的目标，从只读源 Profile 复制 |
 | `prepare-empty` / `run-empty` | 空 Profile，用于 Multiremi 生产与 PPE |
-| `authenticate` | 生产 Multiremi：从 stdin 读 PAT 写入 `multimira_token`，Origin 白名单只有 `http://n37-117-209.byted.org` |
+| `authenticate` | 生产 Multiremi：从 stdin 读 PAT 写入 `multimira_token`，Origin 白名单只有 `http://n37-201-064.byted.org` |
 | `ppe-authenticate` | 隔离 PPE：同样从 stdin 读 token，Origin 白名单只有 `32101-32106` 两个主机名 |
 | `close` / `cleanup` | 关闭并删除当前 Issue 的浏览器上下文 |
 

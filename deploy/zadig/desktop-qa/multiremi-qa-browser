@@ -191,8 +191,8 @@ close_browser() {
 
 authenticate_browser() {
   local issue_key="$1"
-  local target_url="${2:-http://n37-117-209.byted.org}"
-  if [[ ! "${target_url}" =~ ^http://n37-117-209\.byted\.org(/.*)?$ ]]; then
+  local target_url="${2:-http://n37-201-064.byted.org}"
+  if [[ ! "${target_url}" =~ ^http://n37-201-064\.byted\.org(/.*)?$ ]]; then
     echo "refusing to inject a Multiremi PAT into an untrusted origin" >&2
     exit 2
   fi
@@ -204,7 +204,7 @@ authenticate_browser() {
     exit 2
   fi
 
-  empty_browser_command "${issue_key}" --json open "http://n37-117-209.byted.org/login" >/dev/null
+  empty_browser_command "${issue_key}" --json open "http://n37-201-064.byted.org/login" >/dev/null
   local encoded
   local script
   encoded="$(printf '%s' "${token}" | base64 -w0)"
@@ -230,7 +230,7 @@ ppe_authenticate_browser() {
     echo "usage: multiremi-qa-browser ppe-authenticate <issue-key> <ppe-url>" >&2
     exit 2
   fi
-  if [[ ! "${target_url}" =~ ^(http://(10\.37\.117\.209|n37-117-209\.byted\.org):3210[1-6])(/.*)?$ ]]; then
+  if [[ ! "${target_url}" =~ ^(http://(10\.37\.201\.64|n37-201-064\.byted\.org):3210[1-6])(/.*)?$ ]]; then
     echo "refusing to inject a token into a non-PPE origin" >&2
     exit 2
   fi
@@ -291,7 +291,7 @@ case "${command}" in
     empty_browser_command "${issue_key}" "$@"
     ;;
   authenticate)
-    authenticate_browser "${issue_key}" "${3:-http://n37-117-209.byted.org}"
+    authenticate_browser "${issue_key}" "${3:-http://n37-201-064.byted.org}"
     ;;
   ppe-authenticate)
     ppe_authenticate_browser "${issue_key}" "${3:-}"

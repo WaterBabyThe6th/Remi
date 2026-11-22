@@ -29,7 +29,7 @@ state_root="${MULTIREMI_PPE_QA_STATE_DIR:-${TMPDIR:-/tmp}/multiremi-ppe-qa}"
 http_timeout="${MULTIREMI_PPE_QA_HTTP_TIMEOUT:-15}"
 
 # 只接受工作流分配的六个 PPE slot。生产 Origin 落不进来，误把生产地址传进来会硬失败。
-readonly PPE_URL_RE='^(http://(10\.37\.117\.209|n37-117-209\.byted\.org):3210[1-6])(/.*)?$'
+readonly PPE_URL_RE='^(http://(10\.37\.201\.64|n37-201-064\.byted\.org):3210[1-6])(/.*)?$'
 
 die() { echo "$*" >&2; exit 2; }
 
@@ -44,7 +44,7 @@ state_file() { printf '%s/%s.state\n' "${state_root}" "$1"; }
 ppe_origin() {
   local url="${1:-}"
   [[ "${url}" =~ ${PPE_URL_RE} ]] ||
-    die "refusing a non-PPE URL: ${url:-<empty>} (expected http://{10.37.117.209|n37-117-209.byted.org}:32101-32106)"
+    die "refusing a non-PPE URL: ${url:-<empty>} (expected http://{10.37.201.64|n37-201-064.byted.org}:32101-32106)"
   printf '%s\n' "${BASH_REMATCH[1]}"
 }
 

@@ -1,6 +1,6 @@
 ---
 name: multiremi-web-qa
-description: 在可信 Linux 桌面环境中安全验收 Multiremi 生产页面或按 Issue 隔离的 PPE。生产环境使用 Custom Env 里的临时浏览器 PAT；209 的 32101-32106 PPE 使用该 PPE 自己签发的短期本地 PAT，不使用生产凭证。用于 UI 冒烟测试、登录态页面检查、浏览器兼容性、响应式布局、控制台与网络诊断，以及 212 桌面环境中的视觉回归测试。
+description: 在可信 Linux 桌面环境中安全验收 Multiremi 生产页面或按 Issue 隔离的 PPE。生产环境使用 Custom Env 里的临时浏览器 PAT；n37-201-064 的 32101-32106 PPE 使用该 PPE 自己签发的短期本地 PAT，不使用生产凭证。用于 UI 冒烟测试、登录态页面检查、浏览器兼容性、响应式布局、控制台与网络诊断，以及 212 桌面环境中的视觉回归测试。
 ---
 
 # Multiremi 网页验收
@@ -9,10 +9,10 @@ description: 在可信 Linux 桌面环境中安全验收 Multiremi 生产页面�
 
 ## 环境判定
 
-- 默认生产地址为 `http://n37-117-209.byted.org`。
+- 默认生产地址为 `http://n37-201-064.byted.org`。
 - 任务明确给出地址或设置 `MULTIREMI_QA_BASE_URL` 时使用该地址。
-- 仅 `http://10.37.117.209:32101` 至 `:32106`，以及
-  `http://n37-117-209.byted.org:32101` 至 `:32106` 属于隔离 PPE。
+- 仅 `http://10.37.201.64:32101` 至 `:32106`，以及
+  `http://n37-201-064.byted.org:32101` 至 `:32106` 属于隔离 PPE。
 - 必须按规范化后的完整 Origin 精确匹配。其他地址全部按生产认证处理，不接受关闭认证的环境开关。
 
 ## 认证规则
@@ -50,9 +50,9 @@ description: 在可信 Linux 桌面环境中安全验收 Multiremi 生产页面�
 最小的环境判定必须等价于：
 
 ```ts
-const baseURL = process.env.MULTIREMI_QA_BASE_URL || "http://n37-117-209.byted.org";
+const baseURL = process.env.MULTIREMI_QA_BASE_URL || "http://n37-201-064.byted.org";
 const origin = new URL(baseURL).origin;
-const ppe = /^http:\/\/(10\.37\.117\.209|n37-117-209\.byted\.org):3210[1-6]$/.test(origin);
+const ppe = /^http:\/\/(10\.37\.201\.64|n37-201-064\.byted\.org):3210[1-6]$/.test(origin);
 // 生产用 Custom Env 的 PAT；PPE 用它自己签发的短期本地 PAT。两边都要 token，
 // 区别只在于凭证来源——PPE 永远拿不到、也不需要生产凭证。
 const token = ppe ? mintPpeLocalToken(origin) : process.env.MULTIREMI_QA_WEB_TOKEN;
