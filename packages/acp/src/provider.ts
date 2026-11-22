@@ -36,6 +36,7 @@ import { createAdapter, type AgentAdapter } from "./adapters/index.js";
 import { resolveClaudeContextSelection, hasOneMillionContext } from "./adapters/claude-code/model-context.js";
 import { autonomousOrigin, isWorkspaceTrustPrompt, nativeAgentId, permissionAsQuestion, serviceMessage, serviceMessageFailure, type PermissionQuestion } from "./adapters/trace-vendor.js";
 import { accessConfigFor, type AcpAccessConfig } from "./access/index.js";
+import { antigravityPersonalHome, antigravityPersonalMode } from "./antigravity-personal.js";
 import type { GatewayShimChannel, GatewayShimEvent, GatewayShimHost, GatewayShimListingFailure } from "./access/gateway-shim-types.js";
 import { GEMINI_USAGE_SOURCE, geminiObservationUsage } from "./gemini-request-usage.js";
 import { cursorHealthProblem, resolveCursorAgentExecutable } from "./cursor-install.js";
@@ -2408,14 +2409,14 @@ export class AcpProvider implements Provider {
         gateway = openGateway(this._options.gatewayShim, `${this._adapter.agentType}:${chatId}`);
       }
       const shimUrl = gateway?.channel?.baseUrl ?? this._options.gatewayUrl;
-      if (!shimUrl) {
+      if (!shimUrl && this._access.usage === "gateway-shim") {
         throw new Error(`[${this._adapter.agentType}_gateway_unconfigured] ${this._adapter.agentType} runs only through the `
           + "workspace Model gateway; configure it under Model gateway");
       }
       try {
         // Last, so the access config owns home, routing and the blanked credentials.
         Object.assign(env, this._access.buildEnv({
-          home: home!, shimUrl, model, daemonEnv: { ...process.env, ...this._options.env },
+          home: home!, shimUrl: shimUrl ?? "", model, daemonEnv: { ...process.env, ...this._options.env },
           launch: launch.pinned ? { executable: launch.executable, args: launch.args ?? [] } : null,
         }));
       } catch (error) {
@@ -2523,6 +2524,10 @@ export class AcpProvider implements Provider {
       this._startingCommands.delete(client);
       await client.stop();
       closeGateway(gateway);
+      if (this._adapter.agentType === "antigravity" && antigravityPersonalMode()
+        && error instanceof AcpRpcError && /authentication required/i.test(error.message)) {
+        throw new Error("Antigravity account authentication required on this node; run remi runtime auth login antigravity", { cause: error });
+      }
       throw error;
     }
   }
@@ -2540,6 +2545,10 @@ export class AcpProvider implements Provider {
         if (problem) throw new Error(`[cursor_not_installed] ${problem}`);
       }
       return { executable, args: this._options.args?.length ? this._options.args : ["acp"], pinned: false };
+    }
+    if (this._adapter.agentType === "antigravity" && antigravityPersonalMode() && explicit) {
+      return { executable, args: this._options.args?.length ? this._options.args
+        : ["acp", "--gemini-dir", antigravityPersonalHome(), "--disable-telemetry"], pinned: false };
     }
     if (!this._access || explicit) return { executable, args: this._options.args, pinned: false };
     const pinned = this._access.launch();

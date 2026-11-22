@@ -154,8 +154,12 @@ Agent creation, editing and default-agent commands accept `--provider antigravit
 `remi daemon start --provider antigravity` (and `remi setup` with that provider)
 installs Google's pinned Antigravity ACP server when it is missing; the first
 download needs `--accept-antigravity-terms` or `REMI_ACCEPT_ANTIGRAVITY_TERMS=1`.
-Automatic daemon discovery considers only that pinned install, never `agy` on
-`PATH`. See [Antigravity Runtime](antigravity.md) for install, gateway and
+In default gateway mode, automatic daemon discovery considers the pinned install.
+With `REMI_ANTIGRAVITY_AUTH_MODE=personal`, it considers the installed official
+`agy` CLI instead. `remi runtime auth login antigravity` runs its SSH-compatible
+personal Google login, using `REMI_ANTIGRAVITY_PERSONAL_HOME` (default `~/.gemini`)
+and the optional absolute `REMI_AGY_EXECUTABLE` path. `runtime prepare` validates
+the installed CLI in that mode. See [Antigravity Runtime](antigravity.md) for install, gateway and
 execution limits. Agent Plugin provider filters remain scoped
 to Claude/Codex.
 

@@ -9,6 +9,7 @@ import { linkCodexAuthFromBase, seedCodexHomeFromBase } from "../agent-plugins/c
 import { AgentPluginError } from "../agent-plugins/types.js";
 import { sanitizeProviderConfigValue } from "../provider-config-sanitize.js";
 import { loadCodexModelCatalog, mergeClaudeSettings, mergeCodexSessionConfig, type CodexModelCatalogState } from "../relay-sync.js";
+import { antigravityPersonalMode } from "@acp/antigravity-personal.js";
 import type { RelayHttpRequest } from "@shared/relay-http.js";
 import { antigravityHomeFiles } from "@acp/access/antigravity.js";
 import {
@@ -399,6 +400,7 @@ export async function seedIssueSessionAntigravityHome(
   directories: { cwd: string; workspaceDir?: string | null },
 ): Promise<void> {
   if (resolvedHome.provider !== "antigravity") return;
+  if (antigravityPersonalMode()) return;
   await ensureOwnedDirectory(resolvedHome.storageRoot, join(resolvedHome.home, "antigravity-acp"), "Antigravity settings");
   for (const file of antigravityHomeFiles(directories)) {
     await writePrivateFileIfChanged(join(resolvedHome.home, file.path), file.content);

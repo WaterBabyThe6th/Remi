@@ -15,6 +15,7 @@ import {
   ANTIGRAVITY_HARNESS_BINARY, antigravityHealthProblem, resolveAntigravityServer,
 } from "../antigravity-install.js";
 import type { AcpAccessConfig, AcpAccessEnvInput } from "./types.js";
+import { antigravityPersonalHome, resolvePersonalAntigravity } from "../antigravity-personal.js";
 
 /** Non-secret placeholder the shim discards; the harness also echoes it as `x-goog-api-key`. */
 export const ANTIGRAVITY_PLACEHOLDER_KEY = "remi-shim";
@@ -145,4 +146,27 @@ export const ANTIGRAVITY_ACCESS: AcpAccessConfig = {
   // A background shell command keeps a server 1.4.0 turn open, and the server
   // ignores session/cancel meanwhile; a resumed turn can then never end.
   turnStallTimeoutMs: 120_000,
+};
+
+/** Native agy account auth uses the node's own credential store and native session IDs. */
+export const ANTIGRAVITY_PERSONAL_ACCESS: AcpAccessConfig = {
+  ...ANTIGRAVITY_ACCESS,
+  launch: () => resolvePersonalAntigravity(),
+  healthProblem: () => {
+    try { resolvePersonalAntigravity(); return null; }
+    catch (error) { return (error as Error).message; }
+  },
+  retiredExecutables: [],
+  buildEnv: ({ daemonEnv }) => {
+    const env: Record<string, string> = {};
+    for (const name of [...ANTIGRAVITY_BLANKED_ENV, "AGY_ACP_ENABLE_GATEWAY_AUTH", "AGY_LLM_GATEWAY_URL", "AGY_LLM_GATEWAY_API_KEY", "ANTIGRAVITY_HARNESS_PATH"]) env[name] = "";
+    for (const name of Object.keys(daemonEnv)) {
+      if (BLANKED_PREFIXES.some(prefix => name.startsWith(prefix))) env[name] = "";
+    }
+    return { ...env, GEMINI_HOME: antigravityPersonalHome(), AGY_ACP_ENABLE_OAUTH: "1", BROWSER: "/usr/bin/false" };
+  },
+  modelRequired: false,
+  effort: "selector",
+  usage: "bridge",
+  turnStallTimeoutMs: null,
 };

@@ -119,7 +119,7 @@ PostgreSQL 的 `PgBridge.request` 用 `Atomics.wait` 等待 [pg-worker](../packa
 ## 配置与能力定位
 
 - bot assignment 由工作区独立的 `multiremi_feishu_bot_configs` 记录关联 Agent/Runtime；实际任务通过 Agent 行组装执行参数。bot 凭据在控制面配置，daemon 环境仅承载连接和进程设置，见[配置说明](deploy/66-8-remi-environment.md)。
-- 当前运行时支持 Claude、Codex、[Antigravity](antigravity.md) 和 [Cursor](cursor.md)，都通过 ACP：前两者用 npm bridge，Antigravity 用按机器下载并固定版本的 Google ACP server（网关认证；真实 key 与用量都在 daemon 的[网关垫片](../packages/daemon/src/agent-runtime/antigravity/gateway-shim.ts)），Cursor 使用机器上已安装的官方 CLI，统一输出 Remi 事件。认证方式按各 CLI 和[安装说明](../README.md)配置。
+- 当前运行时支持 Claude、Codex、[Antigravity](antigravity.md) 和 [Cursor](cursor.md)，都通过 ACP：前两者用 npm bridge，Antigravity 按节点选择官方 `agy acp` 个人账号登录，或按机器下载并固定版本的 Google ACP server（网关认证；真实 key 与请求用量在 daemon 的[网关垫片](../packages/daemon/src/agent-runtime/antigravity/gateway-shim.ts)），Cursor 使用机器上已安装的官方 CLI，统一输出 Remi 事件。认证方式按各 CLI 和[安装说明](../README.md)配置。
 - Codex 与 Claude Code 的 Runtime 详情支持自定义模型连接，执行时注入隔离 Home；鉴权、任务快照与协议分别见 [Codex 连接](design/acp-codex-via-codex-acp.md) 和 [Claude Code 连接](design/acp-claude-via-claude-agent-acp.md)。
 - [MCP 组装](../packages/daemon/src/agent-runtime/mcp/ephemeral.ts)当前接受 `command` 形式的 stdio 服务；远程 HTTP 配置不能仅因存进 agent 字段就视为已注入。
 - 项目知识由[知识服务](../packages/server/src/project-knowledge/service.ts)和[知识路由](../packages/server/src/api/routers/knowledge.ts)提供；用户项目知识与本仓库开发文档分别维护。

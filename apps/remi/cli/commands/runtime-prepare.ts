@@ -1,5 +1,6 @@
 import type { ProvisionProvider } from "@acp/provision.js";
 import type { CommandSpec } from "../core/command-registry.js";
+import { antigravityPersonalMode, resolvePersonalAntigravity } from "@acp/antigravity-personal.js";
 
 const BUNDLED_PROVIDERS: readonly ProvisionProvider[] = ["claude", "codex"];
 /** Antigravity is a per-machine download of Google's server, never part of a Remi bundle. */
@@ -112,13 +113,20 @@ async function loadRuntimePrepareDeps(): Promise<RuntimePrepareDeps> {
         await verifyAcpRuntime(provider, locateBridgePackage(provider)!);
       }
       if (providers.includes("antigravity")) {
+        if (antigravityPersonalMode()) {
+          const launch = resolvePersonalAntigravity();
+          const child = Bun.spawn([launch.executable, "acp", "--help"], { stdout: "ignore", stderr: "inherit" });
+          if (await child.exited !== 0) throw new Error("The installed agy CLI must support agy acp");
+          return;
+        }
         await ensureAntigravityServer({ acceptTerms: options.acceptAntigravityTerms, log: (message) => console.error(`[runtime] ${message}`) });
         // The daemon's own gateway shim sits in front of the fake upstream, so the check also proves the header policy.
         const { contractCheckShim } = await import("@daemon/agent-runtime/antigravity/gateway-shim.js");
         await verifyAntigravityRuntime({ shim: contractCheckShim });
       }
     },
-    versions: (provider) => provider === "antigravity" ? { server: ANTIGRAVITY_PIN.server }
+    versions: (provider) => provider === "antigravity" ? antigravityPersonalMode()
+      ? { executable: resolvePersonalAntigravity().executable } : { server: ANTIGRAVITY_PIN.server }
       : provider === "cursor" ? { executable: resolveCursorAgentExecutable()! } : releaseRuntimeVersions(provider),
   };
 }

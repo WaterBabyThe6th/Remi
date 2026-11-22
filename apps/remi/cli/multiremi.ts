@@ -250,6 +250,8 @@ async function serve(options: CliOptions): Promise<void> {
  */
 async function ensureExplicitAntigravity(options: CliOptions, provider: string | null | undefined): Promise<void> {
   if (provider !== "antigravity") return;
+  const { antigravityPersonalMode, resolvePersonalAntigravity } = await import("@acp/antigravity-personal.js");
+  if (antigravityPersonalMode()) { resolvePersonalAntigravity(); return; }
   const { ensureAntigravityServer } = await import("@acp/antigravity-install.js");
   await ensureAntigravityServer({
     acceptTerms: Boolean(options["accept-antigravity-terms"]),

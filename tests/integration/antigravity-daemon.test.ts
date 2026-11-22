@@ -94,9 +94,21 @@ function fakeGateway() {
   return { requests, control, base: `http://127.0.0.1:${server.port}/antigravity` };
 }
 
-async function setup(options: { gateway: ReturnType<typeof fakeGateway> | null; turnStallTimeoutMs?: number }) {
+async function setup(options: { gateway: ReturnType<typeof fakeGateway> | null; turnStallTimeoutMs?: number; personal?: boolean }) {
   const root = realpathSync(mkdtempSync(join(os.tmpdir(), "remi-agy-daemon-")));
   cleanup.push(() => rmSync(root, { recursive: true, force: true, maxRetries: 5 }));
+  const fixture = options.personal ? resolve("tests/fixtures/antigravity-personal-acp-fake.mjs") : FIXTURE;
+  if (options.personal) {
+    const saved = { ...process.env };
+    process.env.REMI_ANTIGRAVITY_AUTH_MODE = "personal";
+    process.env.REMI_ANTIGRAVITY_PERSONAL_HOME = join(root, "account");
+    process.env.REMI_AGY_EXECUTABLE = process.execPath;
+    cleanup.push(() => {
+      for (const key of ["REMI_ANTIGRAVITY_AUTH_MODE", "REMI_ANTIGRAVITY_PERSONAL_HOME", "REMI_AGY_EXECUTABLE"]) {
+        if (saved[key] === undefined) delete process.env[key]; else process.env[key] = saved[key];
+      }
+    });
+  }
   const database: Database = openSqliteDatabase(":memory:");
   cleanup.push(() => database.close());
   const store = new MultiremiStore(database);
@@ -113,8 +125,8 @@ async function setup(options: { gateway: ReturnType<typeof fakeGateway> | null; 
     });
   }
   // The agent names no model: the engine's default_model applies.
-  const agent = store.createAgent({ name: "AGY", provider: "antigravity", executable: process.execPath, customArgs: [FIXTURE],
-    customEnv: { FAKE_AGY_CAPTURE: capture } });
+  const agent = store.createAgent({ name: "AGY", provider: "antigravity", executable: process.execPath, customArgs: [fixture],
+    customEnv: { FAKE_AGY_CAPTURE: capture, FAKE_PERSONAL_CAPTURE: capture } });
   const token = await store.createAccessToken({ name: "AGY test daemon", type: "daemon", workspaceId: "local", daemonId: "agy-test-machine" });
   const server = startMultiremiServer({ store, scheduler: null, authToken: "agy-test-root", hostname: "127.0.0.1", port: 0 });
   cleanup.push(() => server.stop(true));
@@ -131,7 +143,7 @@ async function setup(options: { gateway: ReturnType<typeof fakeGateway> | null; 
     // The model probe has no pinned install here: run it in-process against the fake server.
     inProcessRuntimeModelDiscoveryEnabled: true,
     providerFactory: (provider) => createRuntimeProvider({
-      ...(provider.executable ? provider : { ...provider, executable: process.execPath, args: [FIXTURE], env: { ...provider.env, FAKE_AGY_CAPTURE: capture } }),
+      ...(provider.executable ? provider : { ...provider, executable: process.execPath, args: [fixture], env: { ...provider.env, FAKE_AGY_CAPTURE: capture, FAKE_PERSONAL_CAPTURE: capture } }),
       ...(options.turnStallTimeoutMs ? { turnStallTimeoutMs: options.turnStallTimeoutMs } : {}),
     }),
   });
@@ -169,6 +181,24 @@ function usageUnits(database: Database, taskId: string) {
 }
 
 describe("Antigravity through the daemon gateway shim", () => {
+  it("executes a personal-account task and discovers its models without a workspace gateway", async () => {
+    const { root, local, store, agent, runtime, lines } = await setup({ gateway: null, personal: true });
+    const directory = store.runtimeWorkspaces.create(runtime.id, { name: "Personal project", root_path: local });
+    const chat = store.createChatSession({ agentId: agent.id, runtime_workspace_id: directory.id });
+    const isolation = privateTmpUnavailable(root);
+    const task = store.sendChatMessage(chat.id, { body: "hello from account" }).task;
+    await poll(() => ["completed", "failed"].includes(store.getTask(task.id)?.status ?? ""), "personal account task");
+    const done = store.getTask(task.id)!;
+    if (isolation) {
+      expect(done.error).toContain("private_tmp_isolation_unavailable");
+      return;
+    }
+    expect(done.error).toBeNull();
+    expect(done.status).toBe("completed");
+    await poll(() => store.listRuntimeModels(runtime.id).length === 2, "personal account catalog");
+    expect(store.listRuntimeModels(runtime.id).map(model => model.id)).toContain("account-model");
+    expect(lines().filter(line => line.kind === "env").every(line => line.home === join(root, "account") && line.oauth === "1" && line.gateway === "")).toBe(true);
+  });
   it("runs a turn into a turn + items trace, meters every model call through the shim, resumes, and records a cut stream as partial", async () => {
     const gateway = fakeGateway();
     const { root, local, capture, store, database, agent, daemon, lines, runtime } = await setup({ gateway });

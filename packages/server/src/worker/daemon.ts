@@ -5,6 +5,7 @@ import { assertRuntimeClaudeProjectCredentials, resolveRuntimeClaudeProfile, run
 import { resolveRuntimeCodexProfile } from "@daemon/agent-runtime/codex-profile.js";
 import { discoverRuntimeProfileModels } from "./runtime-profile-models.js";
 import { ensureAntigravityServer, installedAntigravity } from "@acp/antigravity-install.js";
+import { antigravityPersonalMode } from "@acp/antigravity-personal.js";
 import { AntigravityGatewayShim, type GatewayShimRun } from "@daemon/agent-runtime/antigravity/gateway-shim.js";
 import { prepareRuntimeCodexModelCatalog } from "./runtime-codex-model-catalog.js";
 import { isPermanentFeishuDeliveryError } from "@shared/feishu-delivery-error.js";
@@ -1972,14 +1973,14 @@ export class MultiremiDaemon {
   private acpVersion(): string | null {
     const provider = this.options.provider;
     // Antigravity's ACP server is the agent itself: the pinned install's version.
-    if (provider === "antigravity") return installedAntigravity()?.manifest.version ?? null;
+    if (provider === "antigravity") return antigravityPersonalMode() ? null : installedAntigravity()?.manifest.version ?? null;
     return provider === "claude" || provider === "codex" ? bridgeVersion(provider) : null;
   }
 
   /** Version of the underlying agent CLI (`claude` / `codex`), or null. */
   private agentVersion(): string | null {
     const provider = this.options.provider;
-    if (provider === "antigravity") return installedAntigravity()?.manifest.version ?? null;
+    if (provider === "antigravity") return antigravityPersonalMode() ? null : installedAntigravity()?.manifest.version ?? null;
     return provider === "claude" || provider === "codex" ? agentCliVersion(provider) : null;
   }
 
@@ -2197,6 +2198,7 @@ export class MultiremiDaemon {
   private async reinstallAcpBridge(): Promise<string> {
     const provider = this.options.provider;
     if (provider === "antigravity") {
+      if (antigravityPersonalMode()) throw new Error("Update this node's personal agy CLI with agy update, then restart the daemon");
       // Re-download the version this Remi release pins; the terms acceptance on record carries over.
       const installed = await ensureAntigravityServer({ force: true, log: (message) => log.info(`[acp] ${message}`) });
       return `Antigravity ACP server ${installed.manifest.version} reinstalled`;
@@ -2743,7 +2745,6 @@ export class MultiremiDaemon {
    */
   private async antigravityModelProbeOptions(): Promise<{ options: AcpProviderOptions; release: () => void; check: () => void }> {
     const workspaceId = this.options.workspaceId ?? "local";
-    const gateway = antigravityGatewayFor((await this.effectiveWorkspaceRelay(workspaceId))?.antigravity);
     const owner = `${this.options.daemonId ?? this.options.runtimeName}:antigravity`;
     const root = join(probeRoot(this.options.workspacesRoot), `antigravity-${createHash("sha256").update(owner).digest("hex").slice(0, 16)}`);
     const providerHome: IssueSessionProviderHome = {
@@ -2752,6 +2753,13 @@ export class MultiremiDaemon {
     };
     await prepareIssueSessionProviderHome(providerHome);
     await seedIssueSessionAntigravityHome(providerHome, { cwd: root });
+    if (antigravityPersonalMode()) {
+      return {
+        options: { agentType: "antigravity", cwd: root, providerHome: providerHome.home },
+        release: () => {}, check: () => {},
+      };
+    }
+    const gateway = antigravityGatewayFor((await this.effectiveWorkspaceRelay(workspaceId))?.antigravity);
     const run = this.antigravityGatewayShim().forRun({ upstreamBase: gateway.upstreamBase, apiKey: gateway.apiKey, runId: "runtime-model-probe" });
     try {
       const channel = run.open("runtime-model-probe");
@@ -3667,7 +3675,7 @@ export class MultiremiDaemon {
               : null;
       if (relay?.auth_token) failureCredentials.push(relay.auth_token);
       if (task.authToken) failureCredentials.push(task.authToken);
-      if (task.agent?.provider === "antigravity") {
+      if (task.agent?.provider === "antigravity" && !antigravityPersonalMode()) {
         // Before the start ACK, so a missing gateway costs no model call (PR 4 §3).
         const gateway = antigravityGatewayFor(relay);
         if (!task.agent.model && !gateway.defaultModel) {
@@ -4795,11 +4803,11 @@ export class MultiremiDaemon {
       .filter(([name]) => /(?:^|_)(?:SECRET|TOKEN|PASSWORD|API_KEY|ACCESS_KEY|PRIVATE_KEY|CREDENTIAL)(?:_|$)/i.test(name))
       .map(([, value]) => value), ...(antigravity ? [antigravity.apiKey] : [])];
     if (agent.provider === "antigravity") {
-      if (!antigravity || !providerHome) {
+      if (!providerHome || (!antigravity && !antigravityPersonalMode())) {
         throw new Error("[antigravity_gateway_unconfigured] Antigravity runs only through the workspace Model gateway and a session home");
       }
       // Without a selection the server silently runs the gateway's first model.
-      if (!config.model) config.model = antigravity.defaultModel;
+      if (!config.model && antigravity) config.model = antigravity.defaultModel;
       await seedIssueSessionAntigravityHome(providerHome, { cwd: config.cwd, workspaceDir });
     }
 
@@ -4865,7 +4873,8 @@ export class MultiremiDaemon {
         pluginFingerprint: config.pluginFingerprint,
         codexHome: config.codexHome,
         ...(agent.provider === "cursor" && providerHome ? { providerHome: providerHome.home } : {}),
-        ...(antigravity ? { gatewayShim: antigravity.run, providerHome: providerHome!.home } : {}),
+        ...(agent.provider === "antigravity" ? { providerHome: providerHome!.home } : {}),
+        ...(antigravity ? { gatewayShim: antigravity.run } : {}),
         // Honoured only by adapters that declare them (PR 5 §1.1, §2.3).
         nativeSubagentSessions: this.options.nativeSubagents,
         captureAutonomousRounds: this.options.autonomousRounds,
