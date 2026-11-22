@@ -7,6 +7,7 @@
 import { accessSync, constants } from "node:fs";
 import { delimiter, join } from "node:path";
 import { createRuntimeProvider, installedAntigravity } from "@acp/index.js";
+import { antigravityPersonalMode, resolvePersonalAntigravity } from "@acp/antigravity-personal.js";
 import { cursorHealthProblem, ensureCursorAgent, installedUserCursorAgentExecutable } from "@acp/cursor-install.js";
 import { MultiremiDaemonClient, type MultiremiRelayWire } from "@multiremi/worker/client.js";
 
@@ -137,7 +138,10 @@ export function detectMultiremiProviders(options: {
   const extensions = executableExtensions(options.pathExt);
   return SUPPORTED_DAEMON_PROVIDERS.filter((provider) => {
     // Never `agy` on PATH: that CLI integration is retired.
-    if (provider === "antigravity") return (options.antigravityInstalled ?? (() => installedAntigravity() !== null))();
+    if (provider === "antigravity") return (options.antigravityInstalled ?? (() => {
+      if (!antigravityPersonalMode()) return installedAntigravity() !== null;
+      try { resolvePersonalAntigravity(); return true; } catch { return false; }
+    }))();
     if (provider === "cursor" && (options.cursorInstalled
       ? options.cursorInstalled()
       : options.pathEnv === undefined && options.canExecute === undefined

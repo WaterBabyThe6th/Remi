@@ -1,4 +1,5 @@
-import { ANTIGRAVITY_ACCESS } from "./antigravity.js";
+import { ANTIGRAVITY_ACCESS, ANTIGRAVITY_PERSONAL_ACCESS } from "./antigravity.js";
+import { antigravityPersonalMode } from "../antigravity-personal.js";
 import type { AcpAccessConfig } from "./types.js";
 
 export type { AcpAccessConfig, AcpAccessEnvInput, AcpLaunchCommand } from "./types.js";
@@ -16,5 +17,6 @@ const ACCESS_CONFIGS: Readonly<Record<string, AcpAccessConfig>> = {
 
 /** The access config of an agent type, or null for the npm-bridge agents (Claude, Codex). */
 export function accessConfigFor(agentType: string | null | undefined): AcpAccessConfig | null {
+  if (agentType === "antigravity" && antigravityPersonalMode()) return ANTIGRAVITY_PERSONAL_ACCESS;
   return (agentType && Object.hasOwn(ACCESS_CONFIGS, agentType) ? ACCESS_CONFIGS[agentType] : undefined) ?? null;
 }

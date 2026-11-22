@@ -1,12 +1,29 @@
 # Antigravity Runtime
 
-Remi runs Antigravity as the `antigravity` provider on Google's official ACP server (`antigravity-acp`, pinned at 1.4.0). The server authenticates only through its gateway mode, against a loopback gateway shim inside the daemon that holds the workspace Model gateway key. The retired `agy -p` integration and personal-account `agy` logins no longer work.
+Remi supports two node-level Antigravity authentication modes. The default `gateway` mode runs Google's pinned `antigravity-acp` 1.4.0 through a loopback gateway shim. Set `REMI_ANTIGRAVITY_AUTH_MODE=personal` on the execution node to run the installed official `agy acp` with that node user's personal Google account.
 
 > **Opt-in, and not ready to enable by default.** The server is Google's proprietary software, downloaded per machine from Google after the operator accepts [Google's Antigravity terms](https://antigravity.google/terms). Whether this use (a third-party ACP client on an API-key gateway) is covered by those terms has not been reviewed: **get a legal review before enabling Antigravity by default** for any workspace or installer (PR 4 risk R2). Windows is not supported.
 
-## Upgrade notes
+## Personal account on an execution node
 
-1. `agy -p` and personal-account `agy` logins no longer work; an Agent `executable` that points at `agy` is rejected ("points at the retired agy CLI; clear it").
+Install the official agy CLI on the node using [Google’s installation instructions](https://antigravity.google/docs/getting-started). The CLI must support `agy acp`; this integration was checked with CLI 1.5.14 for initialization and authentication method advertisement. A real subscription prompt still requires account login and separate verification.
+
+```bash
+export REMI_ANTIGRAVITY_AUTH_MODE=personal
+remi runtime auth login antigravity
+remi runtime prepare --provider antigravity
+remi daemon start --provider antigravity
+```
+
+Run login and daemon as the same system user. The login command forwards the official terminal authorization flow, allowing SSH use without opening a browser on the node. Set `REMI_AGY_EXECUTABLE` to an absolute executable path if needed. `REMI_ANTIGRAVITY_PERSONAL_HOME` selects the absolute native account-state directory (default `~/.gemini`), passed as `agy acp --gemini-dir`. Native account credentials, refreshes and native conversation records share that directory and are managed by agy; Remi keeps its task instruction files in each isolated provider home and appends them through ACP session metadata. This is a node-owned account, shared by Antigravity tasks admitted to that node; choose node visibility and ownership accordingly.
+
+Personal mode discovers models from the local ACP client, permits its default model when the Agent has none, and uses its reasoning selector and native usage reports. It does not require workspace gateway configuration. Native usage reporting has no gateway request observer; any missing usage remains unknown rather than being inferred from gateway telemetry. The Google account determines model permissions and quota. Model listing readiness alone does not establish that a real subscription request succeeded. See [Google’s ACP authentication documentation](https://antigravity.google/docs/ide/extensions/acp/).
+
+The following sections describe **gateway mode**, including its pinned installer, shim, model selection and measured behavior.
+
+## Gateway setup
+
+1. Gateway mode uses the pinned ACP server. Personal-account nodes select `REMI_ANTIGRAVITY_AUTH_MODE=personal` and the official `agy acp` command as described above.
 2. Configure *Settings > Model gateway > Antigravity* with the gateway base URL, the API key and, ideally, a `default_model` ([engine contract](runtime-model-discovery.md#antigravity-gateway-engine)).
 3. On each machine run `remi runtime prepare --provider antigravity --accept-antigravity-terms`. It downloads about 110 MB on macOS (392 MB on disk) or about 330 MB on Linux (about 1.1 GB on disk).
 4. Reselect the model of every Antigravity Agent (or rely on the engine's `default_model`) and clear its thinking level: stale ids fail with `acp_model_unsupported`, and an explicit effort fails with `acp_effort_unsupported`.
@@ -41,7 +58,7 @@ The daemon-start health check spawns nothing: the manifest must match the pin, b
 
 ## Gateway engine and model
 
-Antigravity runs only through the workspace's *Model gateway > Antigravity* engine (fragment `{"base_url", "default_model"}`, key in the token field; [contract](runtime-model-discovery.md#antigravity-gateway-engine)). Before the start ACK, and therefore before any model call, a task fails with:
+In gateway mode, Antigravity runs through the workspace's *Model gateway > Antigravity* engine (fragment `{"base_url", "default_model"}`, key in the token field; [contract](runtime-model-discovery.md#antigravity-gateway-engine)). Before the start ACK, and therefore before any model call, a task fails with:
 
 - `antigravity_gateway_unconfigured` when the engine, its base URL or its key is missing;
 - `antigravity_model_required` when neither the Agent nor the engine names a model (without a selection the server silently runs the gateway's first model).
