@@ -72,6 +72,16 @@
       "hidden": false,
       "migration_status": "native"
     },
+    "runtime.auth.login.antigravity": {
+      "command": "remi runtime auth login antigravity",
+      "aliases": [],
+      "auth": [],
+      "capability": null,
+      "mutation": "write",
+      "output": [],
+      "hidden": false,
+      "migration_status": "native"
+    },
     "workspace": {
       "command": "remi workspace",
       "aliases": [],

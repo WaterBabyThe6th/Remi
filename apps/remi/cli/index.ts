@@ -19,12 +19,14 @@ import { repoCommandSpecs } from "./commands/repo.js";
 import { tokenCommandSpecs } from "./commands/token.js";
 import { workspaceCommandSpecs } from "./commands/workspace.js";
 import { runtimePrepareCommandSpec } from "./commands/runtime-prepare.js";
+import { runtimeAuthCommandSpec } from "./commands/runtime-auth.js";
 import { RETIRED_CLI_COMMANDS, assertNotRetired, replaceRetiredSpecs, retiredSpec } from "./core/retired-commands.js";
 import { unifiedCommandSpecs } from "./commands/unified.js";
 
 const commandRegistry = new CommandRegistry();
 commandRegistry.register(contextCommandSpec());
 commandRegistry.register(runtimePrepareCommandSpec());
+commandRegistry.register(runtimeAuthCommandSpec());
 for (const spec of replaceRetiredSpecs([
   ...workspaceCommandSpecs(),
   ...memberCommandSpecs(),

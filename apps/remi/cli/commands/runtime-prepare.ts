@@ -1,18 +1,21 @@
 import type { ProvisionProvider } from "@acp/provision.js";
 import type { CommandSpec } from "../core/command-registry.js";
+import { antigravityPersonalMode, resolvePersonalAntigravity } from "@acp/antigravity-personal.js";
 
 const BUNDLED_PROVIDERS: readonly ProvisionProvider[] = ["claude", "codex"];
 /** Antigravity is a per-machine download of Google's server, never part of a Remi bundle. */
-export type RuntimePrepareProvider = ProvisionProvider | "antigravity";
-const PREPARABLE_PROVIDERS: readonly RuntimePrepareProvider[] = [...BUNDLED_PROVIDERS, "antigravity"];
+export type RuntimePrepareProvider = ProvisionProvider | "antigravity" | "cursor";
+const PREPARABLE_PROVIDERS: readonly RuntimePrepareProvider[] = [...BUNDLED_PROVIDERS, "antigravity", "cursor"];
 
-export type RuntimePrepareVersions = { acp: string; sdk: string; executable: string } | { server: string };
+export type RuntimePrepareVersions = { acp: string; sdk: string; executable: string } | { server: string } | { executable: string };
 
 export interface RuntimePrepareDeps {
   configuredProvider(): string | undefined;
   detectProviders(): readonly string[];
   /** Some Antigravity install (any version) exists, so its terms were accepted before. */
   antigravityInstalled(): boolean;
+  /** Any managed Cursor version selects the release's current pin for upgrade preparation. */
+  cursorInstalled?(): boolean;
   prepare(providers: RuntimePrepareProvider[], options: { acceptAntigravityTerms: boolean }): Promise<void>;
   versions(provider: RuntimePrepareProvider): RuntimePrepareVersions;
 }
@@ -23,10 +26,10 @@ export function runtimePrepareCommandSpec(
   return {
     id: "runtime.prepare",
     path: ["runtime", "prepare"],
-    description: "Install and verify this release's local ACP runtimes: bundled Claude/Codex and, on request, Google's Antigravity server",
+    description: "Install and verify Claude, Codex, Antigravity or Cursor agent runtimes",
     mutation: "write",
     options: [
-      { name: "provider", type: "string", repeatable: true, valueName: "claude|codex|antigravity", description: "Prepare a provider; defaults to providers already present on this machine" },
+      { name: "provider", type: "string", repeatable: true, valueName: "claude|codex|antigravity|cursor", description: "Prepare a provider; defaults to providers already present on this machine" },
       { name: "accept-antigravity-terms", type: "boolean", description: "Accept Google's Antigravity terms for the first Antigravity download (or set REMI_ACCEPT_ANTIGRAVITY_TERMS=1)" },
     ],
     run: async ({ options }) => {
@@ -36,13 +39,15 @@ export function runtimePrepareCommandSpec(
         configured: deps.configuredProvider(),
         detect: deps.detectProviders,
         antigravityInstalled: deps.antigravityInstalled,
+        cursorInstalled: deps.cursorInstalled,
       });
       await deps.prepare(providers, { acceptAntigravityTerms: options["accept-antigravity-terms"] === true });
       console.log(JSON.stringify({ runtimes: providers.map((provider) => {
         const v = deps.versions(provider);
         return "server" in v
           ? { provider, server: v.server, verified: true }
-          : { provider, acp: v.acp, sdk: v.sdk, bundled_executable: v.executable, verified: true };
+          : "acp" in v ? { provider, acp: v.acp, sdk: v.sdk, bundled_executable: v.executable, verified: true }
+            : { provider, executable: v.executable, verified: true };
       }) }));
     },
   };
@@ -61,15 +66,17 @@ export function resolveRuntimePrepareProviders(input: {
   configured?: string;
   detect: () => readonly string[];
   antigravityInstalled?: () => boolean;
+  cursorInstalled?: () => boolean;
 }): RuntimePrepareProvider[] {
   if (input.explicit !== undefined) {
     const requested = Array.isArray(input.explicit) ? input.explicit : [input.explicit];
-    if (!requested.every(isPreparableProvider)) throw new Error("--provider must be claude, codex or antigravity");
+    if (!requested.every(isPreparableProvider)) throw new Error("--provider must be claude, codex, antigravity or cursor");
     return [...new Set(requested)];
   }
-  const candidates = input.configured ? [input.configured] : input.detect();
+  const candidates = input.configured ? [input.configured]
+    : [...input.detect(), ...(input.cursorInstalled?.() ? ["cursor"] : [])];
   return [...new Set(candidates.filter((provider): provider is RuntimePrepareProvider =>
-    isBundledProvider(provider) || (provider === "antigravity" && (input.antigravityInstalled?.() ?? false))))];
+    isBundledProvider(provider) || provider === "cursor" || (provider === "antigravity" && (input.antigravityInstalled?.() ?? false))))];
 }
 
 function isBundledProvider(provider: string): provider is ProvisionProvider {
@@ -87,6 +94,7 @@ async function loadRuntimePrepareDeps(): Promise<RuntimePrepareDeps> {
   const { anyAntigravityInstall, ensureAntigravityServer } = await import("@acp/antigravity-install.js");
   const { loadMultiremiConfig } = await import("@multiremi/config.js");
   const { detectMultiremiProviders } = await import("../multiremi/daemon-health.js");
+  const { anyCursorInstall, ensureCursorAgent, resolveCursorAgentExecutable } = await import("@acp/cursor-install.js");
   return {
     configuredProvider: () => process.env.MULTIREMI_PROVIDER || loadMultiremiConfig().provider,
     detectProviders: () => [
@@ -94,7 +102,9 @@ async function loadRuntimePrepareDeps(): Promise<RuntimePrepareDeps> {
       ...(anyAntigravityInstall() ? ["antigravity"] : []),
     ],
     antigravityInstalled: () => anyAntigravityInstall(),
+    cursorInstalled: () => anyCursorInstall(),
     prepare: async (providers, options) => {
+      if (providers.includes("cursor")) await ensureCursorAgent({ log: (message) => console.error(`[runtime] ${message}`) });
       const bundled = providers.filter(isBundledProvider);
       // Preflight must not switch the executable used by the old daemon if a
       // later provider fails validation. Normal startup activates the bundle.
@@ -103,12 +113,20 @@ async function loadRuntimePrepareDeps(): Promise<RuntimePrepareDeps> {
         await verifyAcpRuntime(provider, locateBridgePackage(provider)!);
       }
       if (providers.includes("antigravity")) {
+        if (antigravityPersonalMode()) {
+          const launch = resolvePersonalAntigravity();
+          const child = Bun.spawn([launch.executable, "acp", "--help"], { stdout: "ignore", stderr: "inherit" });
+          if (await child.exited !== 0) throw new Error("The installed agy CLI must support agy acp");
+          return;
+        }
         await ensureAntigravityServer({ acceptTerms: options.acceptAntigravityTerms, log: (message) => console.error(`[runtime] ${message}`) });
         // The daemon's own gateway shim sits in front of the fake upstream, so the check also proves the header policy.
         const { contractCheckShim } = await import("@daemon/agent-runtime/antigravity/gateway-shim.js");
         await verifyAntigravityRuntime({ shim: contractCheckShim });
       }
     },
-    versions: (provider) => provider === "antigravity" ? { server: ANTIGRAVITY_PIN.server } : releaseRuntimeVersions(provider),
+    versions: (provider) => provider === "antigravity" ? antigravityPersonalMode()
+      ? { executable: resolvePersonalAntigravity().executable } : { server: ANTIGRAVITY_PIN.server }
+      : provider === "cursor" ? { executable: resolveCursorAgentExecutable()! } : releaseRuntimeVersions(provider),
   };
 }

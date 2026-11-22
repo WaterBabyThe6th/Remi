@@ -8,8 +8,14 @@ const ROOT = join(import.meta.dir, "../..");
 // Existing production home reads. New defaults need an isolation review, even
 // inside a file that already reads home; lowering a count needs no exemption.
 const HOME_CALL_LIMITS: Readonly<Record<string, number>> = {
+  // Explicit node personal-login mode: agy executable and native account store.
+  // Tests supply REMI_AGY_EXECUTABLE and REMI_ANTIGRAVITY_PERSONAL_HOME in isolated roots.
+  "packages/acp/src/antigravity-personal.ts": 2,
   // ${REMI_HOME:-~/.remi}/acp/antigravity, like the npm bundles' prefix.
   "packages/acp/src/antigravity-install.ts": 1,
+  // Managed install default under ~/.remi plus read-only CLI discovery under
+  // ~/.local/bin; each task supplies its private configuration/data locations.
+  "packages/acp/src/cursor-install.ts": 2,
   "packages/acp/src/client.ts": 2,
   "packages/acp/src/provider.ts": 7,
   "packages/acp/src/provision.ts": 2,

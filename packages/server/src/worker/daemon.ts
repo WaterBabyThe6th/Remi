@@ -5,6 +5,7 @@ import { assertRuntimeClaudeProjectCredentials, resolveRuntimeClaudeProfile, run
 import { resolveRuntimeCodexProfile } from "@daemon/agent-runtime/codex-profile.js";
 import { discoverRuntimeProfileModels } from "./runtime-profile-models.js";
 import { ensureAntigravityServer, installedAntigravity } from "@acp/antigravity-install.js";
+import { antigravityPersonalMode } from "@acp/antigravity-personal.js";
 import { AntigravityGatewayShim, type GatewayShimRun } from "@daemon/agent-runtime/antigravity/gateway-shim.js";
 import { prepareRuntimeCodexModelCatalog } from "./runtime-codex-model-catalog.js";
 import { isPermanentFeishuDeliveryError } from "@shared/feishu-delivery-error.js";
@@ -1152,7 +1153,7 @@ export class MultiremiDaemon {
       );
     }
     this.runtimeModelDiscoveryEnabled = options.inProcessRuntimeModelDiscoveryEnabled === true
-      || (!options.providerFactory && ["claude", "codex", "antigravity"].includes(options.provider ?? "claude"));
+      || (!options.providerFactory && ["claude", "codex", "antigravity", "cursor"].includes(options.provider ?? "claude"));
     const workspacesRoot = configuredMultiremiWorkspacesRoot(options.workspacesRoot);
     const storageMachine = resolveStorageMachineOptions();
     const runtimeName = options.runtimeName ?? process.env.MULTIREMI_RUNTIME_NAME ?? `${hostname()}-${Bun.env.USER ?? "local"}-bun-runtime`;
@@ -1972,14 +1973,14 @@ export class MultiremiDaemon {
   private acpVersion(): string | null {
     const provider = this.options.provider;
     // Antigravity's ACP server is the agent itself: the pinned install's version.
-    if (provider === "antigravity") return installedAntigravity()?.manifest.version ?? null;
+    if (provider === "antigravity") return antigravityPersonalMode() ? null : installedAntigravity()?.manifest.version ?? null;
     return provider === "claude" || provider === "codex" ? bridgeVersion(provider) : null;
   }
 
   /** Version of the underlying agent CLI (`claude` / `codex`), or null. */
   private agentVersion(): string | null {
     const provider = this.options.provider;
-    if (provider === "antigravity") return installedAntigravity()?.manifest.version ?? null;
+    if (provider === "antigravity") return antigravityPersonalMode() ? null : installedAntigravity()?.manifest.version ?? null;
     return provider === "claude" || provider === "codex" ? agentCliVersion(provider) : null;
   }
 
@@ -2197,6 +2198,7 @@ export class MultiremiDaemon {
   private async reinstallAcpBridge(): Promise<string> {
     const provider = this.options.provider;
     if (provider === "antigravity") {
+      if (antigravityPersonalMode()) throw new Error("Update this node's personal agy CLI with agy update, then restart the daemon");
       // Re-download the version this Remi release pins; the terms acceptance on record carries over.
       const installed = await ensureAntigravityServer({ force: true, log: (message) => log.info(`[acp] ${message}`) });
       return `Antigravity ACP server ${installed.manifest.version} reinstalled`;
@@ -2674,13 +2676,13 @@ export class MultiremiDaemon {
   }> {
     const provider = this.options.provider;
     if (provider === "antigravity") return this.antigravityModelProbeOptions();
-    if (provider !== "claude" && provider !== "codex") {
+    if (provider !== "claude" && provider !== "codex" && provider !== "cursor") {
       return { options: { agentType: provider, cwd: homedir() } };
     }
     const workspaceId = this.options.workspaceId ?? "local";
     const workspaceRelay = await this.effectiveWorkspaceRelay(workspaceId);
     const relayAuthoritative = workspaceRelay !== undefined;
-    const relay = provider === "claude" ? workspaceRelay?.claude : workspaceRelay?.codex;
+    const relay = workspaceRelay?.[provider];
     const owner = `${this.options.daemonId ?? this.options.runtimeName}:${provider}`;
     const root = join(
       probeRoot(this.options.workspacesRoot),
@@ -2722,11 +2724,14 @@ export class MultiremiDaemon {
       options: {
         agentType: provider,
         cwd: root,
+        ...(provider === "cursor" ? { providerHome: providerHome.home } : {}),
         env: {
           ...providerEnv,
           ...(provider === "claude"
             ? { CLAUDE_CONFIG_DIR: providerHome.home }
-            : { CODEX_HOME: providerHome.home }),
+            : provider === "cursor"
+              ? { CURSOR_CONFIG_DIR: providerHome.home, CURSOR_DATA_DIR: providerHome.home }
+              : { CODEX_HOME: providerHome.home }),
         },
       },
     };
@@ -2740,7 +2745,6 @@ export class MultiremiDaemon {
    */
   private async antigravityModelProbeOptions(): Promise<{ options: AcpProviderOptions; release: () => void; check: () => void }> {
     const workspaceId = this.options.workspaceId ?? "local";
-    const gateway = antigravityGatewayFor((await this.effectiveWorkspaceRelay(workspaceId))?.antigravity);
     const owner = `${this.options.daemonId ?? this.options.runtimeName}:antigravity`;
     const root = join(probeRoot(this.options.workspacesRoot), `antigravity-${createHash("sha256").update(owner).digest("hex").slice(0, 16)}`);
     const providerHome: IssueSessionProviderHome = {
@@ -2749,6 +2753,13 @@ export class MultiremiDaemon {
     };
     await prepareIssueSessionProviderHome(providerHome);
     await seedIssueSessionAntigravityHome(providerHome, { cwd: root });
+    if (antigravityPersonalMode()) {
+      return {
+        options: { agentType: "antigravity", cwd: root, providerHome: providerHome.home },
+        release: () => {}, check: () => {},
+      };
+    }
+    const gateway = antigravityGatewayFor((await this.effectiveWorkspaceRelay(workspaceId))?.antigravity);
     const run = this.antigravityGatewayShim().forRun({ upstreamBase: gateway.upstreamBase, apiKey: gateway.apiKey, runId: "runtime-model-probe" });
     try {
       const channel = run.open("runtime-model-probe");
@@ -3659,10 +3670,12 @@ export class MultiremiDaemon {
           ? workspaceRelay?.codex
           : task.agent?.provider === "antigravity"
             ? workspaceRelay?.antigravity ?? null
-            : null;
+            : task.agent?.provider === "cursor"
+              ? workspaceRelay?.cursor ?? null
+              : null;
       if (relay?.auth_token) failureCredentials.push(relay.auth_token);
       if (task.authToken) failureCredentials.push(task.authToken);
-      if (task.agent?.provider === "antigravity") {
+      if (task.agent?.provider === "antigravity" && !antigravityPersonalMode()) {
         // Before the start ACK, so a missing gateway costs no model call (PR 4 §3).
         const gateway = antigravityGatewayFor(relay);
         if (!task.agent.model && !gateway.defaultModel) {
@@ -4666,7 +4679,7 @@ export class MultiremiDaemon {
     this.assertWorkspaceRootOwner();
     const agent = task.agent;
     if (!agent) throw new Error(`Task ${task.id} has no agent`);
-    if (!["claude", "codex", "antigravity"].includes(agent.provider)) {
+    if (!["claude", "codex", "antigravity", "cursor"].includes(agent.provider)) {
       throw new Error(`Unsupported Bun Multiremi provider: ${agent.provider}`);
     }
 
@@ -4707,6 +4720,9 @@ export class MultiremiDaemon {
     }
     const wikiMaterialized = preparedWorkspace.wikiMaterialized ?? false;
     await this.restoreReclaimedWorkspace(task, resolvedWorkDir);
+    if (agent.provider === "cursor" && providerHome && !task.runtimeWorkspaceId) {
+      localInstructions = runtimeWorkspaceContext(task, providerHome, workspaceDir)?.instructions ?? null;
+    }
     this.assertWorkspaceRootOwner();
     if (task.chatMessageAttachments?.length) {
       task.chatMessageAttachments = await materializeChatAttachments(
@@ -4727,7 +4743,8 @@ export class MultiremiDaemon {
       // directory, or the provider home when the working directory is the user's own (a runtime workspace or a
       // Project's local_directory).
       const userFolder = Boolean(task.runtimeWorkspaceId) || (resolvedWorkDir.localDirectory && workDir === workspaceDir);
-      if (!userFolder) installedSkillDirs = syncAgentSkills(agentSkillRoot(workDir, agent.provider), task);
+      if (agent.provider === "cursor" && providerHome) installedSkillDirs = syncAgentSkills(providerHomeSkillRoot(providerHome.home, agent.provider), task);
+      else if (!userFolder) installedSkillDirs = syncAgentSkills(agentSkillRoot(workDir, agent.provider), task);
       else if (providerHome) installedSkillDirs = syncAgentSkills(providerHomeSkillRoot(providerHome.home, agent.provider), task);
       else if (agent.skills?.length) log.warn(`Task ${task.id}: no provider home for skills; the user's folder is left as it is`);
       writeProjectResourceContext(contextDir, task);
@@ -4786,11 +4803,11 @@ export class MultiremiDaemon {
       .filter(([name]) => /(?:^|_)(?:SECRET|TOKEN|PASSWORD|API_KEY|ACCESS_KEY|PRIVATE_KEY|CREDENTIAL)(?:_|$)/i.test(name))
       .map(([, value]) => value), ...(antigravity ? [antigravity.apiKey] : [])];
     if (agent.provider === "antigravity") {
-      if (!antigravity || !providerHome) {
+      if (!providerHome || (!antigravity && !antigravityPersonalMode())) {
         throw new Error("[antigravity_gateway_unconfigured] Antigravity runs only through the workspace Model gateway and a session home");
       }
       // Without a selection the server silently runs the gateway's first model.
-      if (!config.model) config.model = antigravity.defaultModel;
+      if (!config.model && antigravity) config.model = antigravity.defaultModel;
       await seedIssueSessionAntigravityHome(providerHome, { cwd: config.cwd, workspaceDir });
     }
 
@@ -4855,7 +4872,9 @@ export class MultiremiDaemon {
         pluginPaths: config.pluginPaths,
         pluginFingerprint: config.pluginFingerprint,
         codexHome: config.codexHome,
-        ...(antigravity ? { gatewayShim: antigravity.run, providerHome: providerHome!.home } : {}),
+        ...(agent.provider === "cursor" && providerHome ? { providerHome: providerHome.home } : {}),
+        ...(agent.provider === "antigravity" ? { providerHome: providerHome!.home } : {}),
+        ...(antigravity ? { gatewayShim: antigravity.run } : {}),
         // Honoured only by adapters that declare them (PR 5 §1.1, §2.3).
         nativeSubagentSessions: this.options.nativeSubagents,
         captureAutonomousRounds: this.options.autonomousRounds,
